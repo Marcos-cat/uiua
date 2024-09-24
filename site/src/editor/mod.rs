@@ -1135,9 +1135,14 @@ pub fn Editor<'a>(
     // Additional functions combobox
     let mut options = Vec::new();
     let mut named_prims: Vec<Primitive> = Primitive::non_deprecated()
-        .filter(|prim| prim.glyph().is_none())
+        .filter(|prim| {
+            prim.glyph().is_none() && (get_show_experimental() || !prim.is_experimental())
+        })
         .collect();
-    named_prims.sort_by_key(|prim| prim.name().trim_start_matches("&"));
+    named_prims.sort_by(|a, b| {
+        (a.name().starts_with('&').cmp(&b.name().starts_with('&')))
+            .then_with(|| a.name().cmp(b.name()))
+    });
     let max_name_len = named_prims
         .iter()
         .map(|prim| prim.name().chars().count())
