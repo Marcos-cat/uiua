@@ -276,6 +276,7 @@ impl fmt::Display for ImplPrimitive {
             RepeatWithInverse => write!(f, "{Repeat}"),
             ValidateType => write!(f, "{Un}…{Type}{Dup}"),
             ValidateTypeConsume => write!(f, "{Un}…{Type}"),
+            UnRawMode => write!(f, "{Un}{}", Primitive::Sys(SysOp::RawMode)),
         }
     }
 }
@@ -1280,6 +1281,10 @@ impl ImplPrimitive {
                 if let ImplPrimitive::ValidateType = self {
                     env.push(val);
                 }
+            }
+            ImplPrimitive::UnRawMode => {
+                let raw_mode = env.rt.backend.get_raw_mode().map_err(|e| env.error(e))?;
+                env.push(raw_mode);
             }
         }
         Ok(())
