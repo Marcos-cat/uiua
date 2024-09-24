@@ -180,7 +180,7 @@ impl Value {
         }
     }
     pub(crate) fn reshape_impl(&mut self, dims: &[Result<isize, bool>], env: &Uiua) -> UiuaResult {
-        self.match_scalar_fill(env);
+        self.match_fill(env);
         val_as_arr!(self, |a| a.reshape(dims, env))
     }
     pub(crate) fn undo_reshape(&mut self, old_shape: &Self, env: &Uiua) -> UiuaResult {
@@ -861,7 +861,7 @@ impl Value {
             return Ok(rotated);
         }
         let by_ints = || self.as_integer_array(env, "Rotation amount must be an array of integers");
-        rotated.match_scalar_fill(env);
+        rotated.match_fill(env);
         match &mut rotated {
             Value::Num(a) => a.rotate_depth(by_ints()?, b_depth, a_depth, env)?,
             Value::Byte(a) => a.rotate_depth(by_ints()?, b_depth, a_depth, env)?,
@@ -985,7 +985,7 @@ impl Value {
     /// Use this array to `windows` another
     pub fn windows(&self, mut from: Self, env: &Uiua) -> UiuaResult<Self> {
         let size_array = self.as_integer_array(env, "Window size must be an integer array")?;
-        from.match_scalar_fill(env);
+        from.match_fill(env);
         Ok(match &*size_array.shape {
             [] | [_] => val_as_arr!(from, |a| a.windows(&size_array.data, env)?.into()),
             [1, _] => val_as_arr!(from, |a| a.chunks(&size_array.data, env)?.into()),
@@ -1217,7 +1217,7 @@ impl Value {
     /// Use this value to `chunks` another
     pub fn chunks(&self, mut from: Self, env: &Uiua) -> UiuaResult<Self> {
         let isize_spec = self.as_ints(env, "Chunk size must be an integer or list of integers")?;
-        from.match_scalar_fill(env);
+        from.match_fill(env);
         Ok(val_as_arr!(from, |a| a.chunks(&isize_spec, env)?.into()))
     }
     pub(crate) fn undo_chunks(self, size: &Self, env: &Uiua) -> UiuaResult<Self> {
@@ -1649,28 +1649,28 @@ impl<T: RealArrayValue> Array<T> {
             if base == 0.0 {
                 return Err(env.error("Base cannot contain 0s"));
             }
-            if base.is_infinite() {
-                return Err(env.error("Base cannot contain infinites"));
+            if base.is_infinite() && base.is_sign_negative() {
+                return Err(env.error("Base cannot contain negative infinities"));
             }
             if base.is_nan() {
                 return Err(env.error("Base cannot contain NaNs"));
             }
         }
-        let max: f64 = bases.iter().product();
-        let max_row_len = bases.len() + self.data.iter().any(|n| n.to_f64() >= max) as usize;
         let mut new_shape = self.shape.clone();
-        new_shape.push(max_row_len);
+        new_shape.push(bases.len());
         let elem_count = validate_size::<f64>(new_shape.iter().copied(), env)?;
         let mut new_data = eco_vec![0.0; elem_count];
         let slice = new_data.make_mut();
         for (i, n) in self.data.iter().enumerate() {
             let mut n = n.to_f64();
             for (j, base) in bases.iter().enumerate() {
-                slice[i * max_row_len + j] = n.rem_euclid(*base);
-                n = n.div_euclid(*base);
-            }
-            if n > 0.0 {
-                slice[i * max_row_len + bases.len()] = n;
+                if n == f64::INFINITY {
+                    slice[i * bases.len() + j] = n;
+                    break;
+                } else {
+                    slice[i * bases.len() + j] = n.rem_euclid(*base);
+                    n = n.div_euclid(*base);
+                }
             }
         }
         Ok(Array::new(new_shape, new_data))
@@ -1689,21 +1689,28 @@ impl<T: RealArrayValue> Array<T> {
         let row_len = shape.pop().unwrap_or(1);
         let elem_count = validate_size::<f64>(shape.iter().copied(), env)?;
         let mut data = eco_vec![0f64; elem_count];
-        let slice = data.make_mut();
-        for (i, chunk) in self.data.chunks_exact(row_len).enumerate() {
-            for n in chunk.iter().rev() {
-                slice[i] = slice[i].mul_add(base, n.to_f64());
+        if row_len > 0 {
+            let slice = data.make_mut();
+            for (i, chunk) in self.data.chunks_exact(row_len).enumerate() {
+                for n in chunk.iter().rev() {
+                    slice[i] = slice[i].mul_add(base, n.to_f64());
+                }
             }
         }
         Ok(Array::new(shape, data))
     }
     fn undo_base_list(&self, bases: &[f64], env: &Uiua) -> UiuaResult<Array<f64>> {
+        let mut max = 0.0;
         for &base in bases {
             if base == 0.0 {
                 return Err(env.error("Base cannot contain 0s"));
             }
             if base.is_infinite() {
-                return Err(env.error("Base cannot contain infinites"));
+                if base.is_sign_negative() {
+                    return Err(env.error("Base cannot contain infinites"));
+                } else {
+                    max = bases.iter().take_while(|&&b| !b.is_infinite()).product();
+                }
             }
             if base.is_nan() {
                 return Err(env.error("Base cannot contain NaNs"));
@@ -1713,12 +1720,17 @@ impl<T: RealArrayValue> Array<T> {
         let row_len = shape.pop().unwrap_or(1);
         let elem_count = validate_size::<f64>(shape.iter().copied(), env)?;
         let mut data = eco_vec![0f64; elem_count];
-        let slice = data.make_mut();
-        let mut bases = bases.to_vec();
-        bases.extend(repeat(1.0).take(row_len.saturating_sub(bases.len())));
-        for (i, chunk) in self.data.chunks_exact(row_len).enumerate() {
-            for (n, &b) in chunk.iter().zip(&bases).rev() {
-                slice[i] = slice[i].mul_add(b, n.to_f64());
+        if row_len > 0 {
+            let slice = data.make_mut();
+            let mut bases = bases.to_vec();
+            bases.extend(repeat(1.0).take(row_len.saturating_sub(bases.len())));
+            for (i, chunk) in self.data.chunks_exact(row_len).enumerate() {
+                for (n, &(mut b)) in chunk.iter().zip(&bases).rev() {
+                    if b.is_infinite() {
+                        b = max;
+                    }
+                    slice[i] = slice[i].mul_add(b, n.to_f64());
+                }
             }
         }
         Ok(Array::new(shape, data))

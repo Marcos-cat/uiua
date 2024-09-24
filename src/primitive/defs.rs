@@ -1332,45 +1332,32 @@ primitive!(
     /// ex: ↘ ¯7 [8 3 9 2 0]
     /// ex: ↘ 5 ↯3_3⇡9
     /// ex: ↘ ¯5 ↯3_3⇡9
-    (2, Drop, DyadicArray, ("drop", '↘')),
-    /// Pad an array
     ///
-    /// The first argument is an amount to pad. The second argument is the array to pad.
+    /// [un] can be used with [drop] to pad an array. Because this takes the same number of arguments as [drop], [on] (and likely [pop]) are required to make the inverse correct.
     /// By default, the pad value is a "zero element" of the array's type.
     /// - For number arrays, it is `0`.
     /// - For character arrays, it is `@ ` (space).
     /// - For complex arrays, it is `0ℂ`.
     /// - For box arrays, it is `⟦⟧`.
     /// A scalar first argument will pad the first axis of the array on both sides.
-    /// ex: # Experimental!
-    ///   : pad 2 [1 2 3]
-    /// ex: # Experimental!
-    ///   : pad 3 "Hello!"
-    /// ex: # Experimental!
-    ///   : pad 1 [1_2 3_4]
+    /// ex: ◌°⟜↘ 2 [1 2 3]
+    /// ex: ◌°⟜↘ ¯2 [1 2 3]
+    /// ex: ◌°⟜↘ 3 "Hello!"
+    /// ex: ◌°⟜↘ 1 [1_2 3_4]
     /// [fill] can be used to set the fill value. Non-scalar fills are allowed if they are compatible with the array's shape.
-    /// ex: # Experimental!
-    ///   : ⬚10pad 2 [1 2 3]
-    /// ex: # Experimental!
-    ///   : ⬚@-pad 2 "abc"
-    /// ex: # Experimental!
-    ///   : ⬚10pad 1 [1_2 3_4]
-    /// ex: # Experimental!
-    ///   : ⬚10_20pad 1 [1_2 3_4]
+    /// ex: ◌⬚10°⟜↘ 2 [1 2 3]
+    /// ex: ◌⬚@-°⟜↘ 2 "abc"
+    /// ex: ◌⬚10°⟜↘ 1 [1_2 3_4]
+    /// ex: ◌⬚10_20°⟜↘ 1 [1_2 3_4]
     /// If the first argument is a list, each axis will be padded on both sides with the corresponding amount.
-    /// ex: # Experimental!
-    ///   : pad 1_2 [1_2 3_4]
-    /// ex: # Experimental!
-    ///   : pad 1_1_2 +1°△2_2_4
-    /// If the first argument is a rank-2 array with a second axis of length 2, the first element of each row pads the front of the array's axis, and the second element pads the back.
-    /// ex: # Experimental!
-    ///   : pad [1_2 3_4] [1_2 3_4]
-    /// ex: # Experimental!
-    ///   : pad ¤2_5 1_2_3
-    /// [pad] can be good for padding images.
-    /// ex: # Experimental!
-    ///   : ⬚Purple pad 20_20 Lena
-    (2, Pad, DyadicArray, "pad"),
+    /// ex: ◌°⟜↘ 1_2 [1_2 3_4]
+    /// ex: ◌°⟜↘ 1_¯2 [1_2 3_4]
+    /// ex: ◌°⟜↘ ¯1_2 +1°△2_2_4
+    /// ex: ◌°⟜↘ ¯1_1_2 +1°△2_2_4
+    /// ex: ◌°⟜↘ ¯1_0_2 +1°△2_2_4
+    /// This can be good for padding images.
+    /// ex: ⬚(⊂:1Purple)(◌°⟜↘¯°⟜↘) 20_20 Logo
+    (2, Drop, DyadicArray, ("drop", '↘')),
     /// Rotate the elements of an array by n
     ///
     /// ex: ↻1 ⇡5
@@ -1592,11 +1579,16 @@ primitive!(
     /// ex: # Experimental!
     ///   : base 16 256
     /// When passed an array of numbers, [base] treats each digit as having a different base.
-    /// Anything left over will be added as the most significant digit.
+    /// Any remainder will be truncated.
     /// ex: # Experimental!
-    ///   : base [10 2] 123
+    ///   : base [10 2] 35 # Truncated
     /// ex: # Experimental!
     ///   : base [60 60 24 365.25] now
+    /// If you want to keep the remainder, use [infinity].
+    /// ex: # Experimental!
+    ///   : base [10 2 ∞] 35
+    /// ex: # Experimental!
+    ///   : base [60 60 24 365.25 ∞] now
     /// Non-integer bases are supported.
     /// ex: # Experimental!
     ///   : base π [η π τ]
@@ -2209,6 +2201,32 @@ primitive!(
     /// A function's [un]-inverse can be set with [setinv].
     /// For more about inverses, see the [Inverse Tutorial](/tutorial/inverses).
     ([1], Un, InversionModifier, ("un", '°')),
+    /// Invert the behavior of a function, but keep its signature
+    ///
+    /// [un] has a guarantee that the inverted function will have a signature that is the inverse of original function's signature. For dyadic functions, if we want the inverse to *also* be dyadic, then we have to do some workarounds. We can either include the first argument in the inverted function, or we can use [on].
+    /// For example, here are two ways to invert [rotate].
+    /// ex: °(↻1) [1 2 3]
+    ///   : ◌°⟜↻ 1 [1 2 3]
+    /// The first way requires the first argument to be a constant, which is not always applicable. The second way works but it is a bit verbose.
+    /// [anti] does the [pop][un][on] for you.
+    /// ex: # Experimental!
+    ///   : ˘↻ 1 [1 2 3]
+    /// This simplifies some interesting inverses.
+    /// ex: # Experimental!
+    ///   : ˘+ 1 5
+    /// ex: # Experimental!
+    ///   : ˘↘ 3 [1 2 3]
+    /// ex: # Experimental!
+    ///   : ⬚@-˘⊏ [0 2 5] "abc"
+    /// ex: # Experimental!
+    ///   : ⬚@-˘⊡ [1_2 3_4] "xy"
+    /// ex: # Experimental!
+    ///   : ˘⍥(+1) 3 10
+    /// ex: # Experimental!
+    ///   : ˘⊂ 1 [1 2 3]
+    /// ex! # Experimental!
+    ///   : ˘⊂ 1 [2 3 4]
+    ([1], Anti, InversionModifier, ("anti", '˘')),
     /// Set the [un]-compatible inverse of a function
     ///
     /// The first function is the uninverted function, and the second function is the inverse.
@@ -3348,6 +3366,7 @@ impl_primitive!(
     (0(1)[1], UnDump, Impure),
     (1, Primes),
     (1, UnBox),
+    (2, UnOnDrop),
     (2, UnOnSelect),
     (2, UnOnPick),
     (1(2), UnJoin),

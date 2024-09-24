@@ -339,6 +339,14 @@
     "class": "DyadicPervasive",
     "description": "Add values"
   },
+  "anti": {
+    "glyph": "˘",
+    "outputs": 1,
+    "modifier_args": 1,
+    "class": "InversionModifier",
+    "description": "Invert the behavior of a function, but keep its signature",
+    "experimental": true
+  },
   "assert": {
     "glyph": "⍤",
     "args": 2,
